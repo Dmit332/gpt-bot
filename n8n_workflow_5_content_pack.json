@@ -1,0 +1,129 @@
+{
+  "name": "5️⃣ Генерация контент-пакета на месяц",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "monthly-trigger",
+      "name": "1-го числа в 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/content/pack",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"posts\": 10,\n  \"stories\": 15\n}",
+        "options": {}
+      },
+      "id": "create-pack",
+      "name": "Создать контент-пакет",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pack = $json;\n\nconst postsCount = pack.posts ? pack.posts.length : 0;\nconst storiesCount = pack.stories ? pack.stories.length : 0;\nconst scheduleCount = pack.schedule ? pack.schedule.length : 0;\n\nconst message = `✅ Контент-пакет на месяц готов!\\n\\n` +\n  `📝 Постов: ${postsCount}\\n` +\n  `📸 Сторис: ${storiesCount}\\n` +\n  `📅 Публикаций запланировано: ${scheduleCount}\\n\\n` +\n  `Все готово к автоматической публикации! 🚀`;\n\nreturn {\n  json: {\n    message: message,\n    posts_count: postsCount,\n    stories_count: storiesCount,\n    schedule_count: scheduleCount,\n    created_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Форматировать отчет",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_MANAGER_CHAT_ID }}\",\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {}
+      },
+      "id": "notify-telegram",
+      "name": "Уведомить в Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "console.log('Контент-пакет создан:', $json);\nreturn $input.all();"
+      },
+      "id": "log-result",
+      "name": "Логирование",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "1-го числа в 9:00": {
+      "main": [
+        [
+          {
+            "node": "Создать контент-пакет",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Создать контент-пакет": {
+      "main": [
+        [
+          {
+            "node": "Форматировать отчет",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать отчет": {
+      "main": [
+        [
+          {
+            "node": "Уведомить в Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Уведомить в Telegram": {
+      "main": [
+        [
+          {
+            "node": "Логирование",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}

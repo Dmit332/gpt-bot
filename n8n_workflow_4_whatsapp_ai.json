@@ -1,0 +1,127 @@
+{
+  "name": "4️⃣ WhatsApp - AI обработка сообщений",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-incoming",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "whatsapp-webhook",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "whatsapp-incoming"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Извлекаем данные от Twilio WhatsApp\nconst body = $json.Body || $json.body || '';\nconst from = ($json.From || $json.from || '').replace('whatsapp:', '');\nconst clientId = from.replace(/[^0-9]/g, '');\n\nreturn {\n  json: {\n    client_id: clientId,\n    phone: from,\n    message: body,\n    channel: 'whatsapp',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "parse-whatsapp",
+      "name": "Парсинг данных",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/chat",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"message\": \"{{ $json.message }}\",\n  \"channel\": \"whatsapp\"\n}",
+        "options": {}
+      },
+      "id": "ai-assistant",
+      "name": "AI Ассистент",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/whatsapp/send",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"{{ $json.response }}\"\n}",
+        "options": {}
+      },
+      "id": "send-response",
+      "name": "Отправить ответ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=OK"
+      },
+      "id": "respond-ok",
+      "name": "Response OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Парсинг данных",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Парсинг данных": {
+      "main": [
+        [
+          {
+            "node": "AI Ассистент",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Ассистент": {
+      "main": [
+        [
+          {
+            "node": "Отправить ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить ответ": {
+      "main": [
+        [
+          {
+            "node": "Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}

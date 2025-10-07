@@ -1,0 +1,106 @@
+{
+  "name": "1️⃣ Новый лид - Автоматическая обработка",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-new-lead",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "new-lead"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/mcp",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"create_client\",\n  \"params\": {\n    \"name\": \"{{ $json.name }}\",\n    \"phone\": \"{{ $json.phone }}\",\n    \"channel\": \"{{ $json.channel || 'n8n' }}\",\n    \"preferences\": {{ $json.preferences ? JSON.stringify($json.preferences) : '{}' }}\n  }\n}",
+        "options": {}
+      },
+      "id": "create-client-mcp",
+      "name": "Создать клиента",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/whatsapp/send",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"Здравствуйте! 👋 Спасибо за интерес к недвижимости.\\n\\nЯ AI-ассистент, помогу подобрать идеальный вариант для вас.\\n\\nРасскажите, что вас интересует?\"\n}",
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Отправить приветствие",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"client_id\": \"{{ $json.id }}\",\n  \"message\": \"Лид создан, приветствие отправлено\"\n}"
+      },
+      "id": "respond-success",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Создать клиента",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Создать клиента": {
+      "main": [
+        [
+          {
+            "node": "Отправить приветствие",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить приветствие": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}
