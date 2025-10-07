@@ -1,0 +1,289 @@
+{
+  "workflows": [
+    {
+      "name": "Обработка новых лидов",
+      "description": "Автоматически создает клиента в CRM и отправляет приветственное сообщение",
+      "nodes": [
+        {
+          "type": "Webhook",
+          "name": "Получить лида",
+          "parameters": {
+            "path": "new-lead",
+            "method": "POST"
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Создать клиента в MCP",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:5000/api/mcp",
+            "bodyParameters": {
+              "action": "create_client",
+              "params": {
+                "name": "={{$json.name}}",
+                "phone": "={{$json.phone}}",
+                "channel": "={{$json.channel}}",
+                "preferences": {}
+              }
+            }
+          }
+        },
+        {
+          "type": "WhatsApp",
+          "name": "Отправить приветствие",
+          "parameters": {
+            "to": "={{$json.phone}}",
+            "message": "Здравствуйте! Спасибо за интерес к нашим объектам. Я AI-ассистент, помогу подобрать недвижимость. Что вас интересует?"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Автоматический подбор объектов",
+      "description": "Когда клиент указывает предпочтения, автоматически подбирает объекты и отправляет",
+      "nodes": [
+        {
+          "type": "Webhook",
+          "name": "Получить предпочтения",
+          "parameters": {
+            "path": "client-preferences",
+            "method": "POST"
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Обновить предпочтения",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:5000/api/mcp",
+            "bodyParameters": {
+              "action": "update_preferences",
+              "params": {
+                "client_id": "={{$json.client_id}}",
+                "preferences": "={{$json.preferences}}"
+              }
+            }
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Поиск объектов",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:5000/api/mcp",
+            "bodyParameters": {
+              "action": "search_properties",
+              "params": "={{$json.preferences}}"
+            }
+          }
+        },
+        {
+          "type": "Function",
+          "name": "Форматировать результаты",
+          "parameters": {
+            "functionCode": "const properties = $input.item.json;\nlet message = 'Нашел для вас подходящие варианты:\\n\\n';\nproperties.slice(0, 3).forEach((p, i) => {\n  message += `${i+1}. ${p.title}\\n💰 ${p.price} ₽\\n📍 ${p.location}\\n\\n`;\n});\nreturn { message };"
+          }
+        },
+        {
+          "type": "WhatsApp",
+          "name": "Отправить подборку",
+          "parameters": {
+            "to": "={{$node['Получить предпочтения'].json.phone}}",
+            "message": "={{$json.message}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Публикация контента по расписанию",
+      "description": "Публикует контент в соцсети по расписанию",
+      "nodes": [
+        {
+          "type": "Schedule",
+          "name": "Расписание",
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "hours",
+                  "hoursInterval": 12
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Получить контент на сегодня",
+          "parameters": {
+            "method": "GET",
+            "url": "http://localhost:5000/api/content/schedule",
+            "qs": {
+              "limit": "5"
+            }
+          }
+        },
+        {
+          "type": "Filter",
+          "name": "Фильтр по дате",
+          "parameters": {
+            "conditions": {
+              "string": [
+                {
+                  "value1": "={{$json.scheduled_date}}",
+                  "operation": "contains",
+                  "value2": "={{$now.format('YYYY-MM-DD')}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "Instagram",
+          "name": "Опубликовать в Instagram",
+          "parameters": {
+            "operation": "post",
+            "caption": "={{$json.content}}",
+            "mediaType": "={{$json.type}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Обработка входящих сообщений WhatsApp",
+      "description": "Обрабатывает входящие сообщения через AI и отвечает клиентам",
+      "nodes": [
+        {
+          "type": "Webhook",
+          "name": "WhatsApp Webhook",
+          "parameters": {
+            "path": "whatsapp-incoming",
+            "method": "POST"
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Отправить в AI-ассистент",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:5000/api/chat",
+            "bodyParameters": {
+              "client_id": "={{$json.from}}",
+              "message": "={{$json.body}}",
+              "channel": "whatsapp"
+            }
+          }
+        },
+        {
+          "type": "WhatsApp",
+          "name": "Отправить ответ",
+          "parameters": {
+            "to": "={{$node['WhatsApp Webhook'].json.from}}",
+            "message": "={{$json.response}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Генерация ежемесячного контент-пакета",
+      "description": "Автоматически генерирует контент-пакет на месяц",
+      "nodes": [
+        {
+          "type": "Schedule",
+          "name": "Начало месяца",
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "cronExpression",
+                  "expression": "0 0 1 * *"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Создать контент-пакет",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:5000/api/content/pack",
+            "bodyParameters": {
+              "posts": 10,
+              "stories": 15
+            }
+          }
+        },
+        {
+          "type": "Slack",
+          "name": "Уведомить команду",
+          "parameters": {
+            "channel": "#marketing",
+            "text": "✅ Контент-пакет на месяц готов! Сгенерировано: {{$json.posts.length}} постов и {{$json.stories.length}} сторис"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Уведомления о горячих лидах",
+      "description": "Отправляет уведомление менеджеру когда лид проявляет активный интерес",
+      "nodes": [
+        {
+          "type": "Webhook",
+          "name": "Активность клиента",
+          "parameters": {
+            "path": "client-activity",
+            "method": "POST"
+          }
+        },
+        {
+          "type": "Filter",
+          "name": "Фильтр горячих",
+          "parameters": {
+            "conditions": {
+              "string": [
+                {
+                  "value1": "={{$json.status}}",
+                  "operation": "equals",
+                  "value2": "qualified"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "HTTP Request",
+          "name": "Получить данные клиента",
+          "parameters": {
+            "method": "GET",
+            "url": "http://localhost:5000/api/clients/{{$json.client_id}}"
+          }
+        },
+        {
+          "type": "Telegram",
+          "name": "Уведомить менеджера",
+          "parameters": {
+            "chatId": "MANAGER_CHAT_ID",
+            "text": "🔥 Горячий лид!\n\nКлиент: {{$json.name}}\nТелефон: {{$json.phone}}\nПредпочтения: {{JSON.stringify($json.preferences)}}\n\nСвяжитесь как можно скорее!"
+          }
+        }
+      ]
+    }
+  ],
+  "webhooks_urls": {
+    "new_lead": "http://your-domain.com/n8n/webhook/new_lead",
+    "property_update": "http://your-domain.com/n8n/webhook/property_update",
+    "content_publish": "http://your-domain.com/n8n/webhook/content_publish",
+    "mcp_general": "http://your-domain.com/api/mcp"
+  },
+  "mcp_actions": [
+    "create_client",
+    "update_preferences",
+    "get_client",
+    "add_property",
+    "search_properties",
+    "create_content",
+    "get_content_schedule"
+  ]
+}
