@@ -1,0 +1,154 @@
+{
+  "name": "2️⃣ Автоподбор объектов по предпочтениям",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "search-properties",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-search",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "search-properties"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/mcp",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"update_preferences\",\n  \"params\": {\n    \"client_id\": \"{{ $json.client_id }}\",\n    \"preferences\": {{ JSON.stringify($json.preferences) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "update-prefs",
+      "name": "Обновить предпочтения",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/mcp",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"search_properties\",\n  \"params\": {{ JSON.stringify($json.preferences) }}\n}",
+        "options": {}
+      },
+      "id": "search-props",
+      "name": "Поиск объектов",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const properties = $input.all()[0].json;\nconst clientData = items[0].json;\n\nif (!Array.isArray(properties) || properties.length === 0) {\n  return {\n    json: {\n      message: \"К сожалению, не нашел подходящих объектов 😔\\n\\nДавайте попробуем изменить параметры поиска?\",\n      phone: clientData.phone,\n      found: 0\n    }\n  };\n}\n\nlet message = `Отлично! Нашёл для вас ${properties.length} подходящих вариантов:\\n\\n`;\n\nproperties.slice(0, 3).forEach((prop, i) => {\n  message += `🏠 **Вариант ${i + 1}:**\\n`;\n  message += `${prop.title}\\n`;\n  message += `💰 Цена: ${Number(prop.price).toLocaleString('ru-RU')} ₽\\n`;\n  message += `📍 ${prop.location}\\n`;\n  message += `📐 Площадь: ${prop.area} м² | Комнат: ${prop.rooms}\\n\\n`;\n});\n\nif (properties.length > 3) {\n  message += `И ещё ${properties.length - 3} вариантов!\\n\\n`;\n}\n\nmessage += `Какой вариант интересен? Расскажу подробнее! 😊`;\n\nreturn {\n  json: {\n    message: message,\n    phone: clientData.phone,\n    found: properties.length,\n    properties: properties.slice(0, 3)\n  }\n};"
+      },
+      "id": "format-results",
+      "name": "Форматировать",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/whatsapp/send",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"{{ $json.message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-results",
+      "name": "Отправить подборку",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"found\": {{ $json.found }},\n  \"sent\": true\n}"
+      },
+      "id": "respond",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Обновить предпочтения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Обновить предпочтения": {
+      "main": [
+        [
+          {
+            "node": "Поиск объектов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Поиск объектов": {
+      "main": [
+        [
+          {
+            "node": "Форматировать",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать": {
+      "main": [
+        [
+          {
+            "node": "Отправить подборку",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отправить подборку": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}

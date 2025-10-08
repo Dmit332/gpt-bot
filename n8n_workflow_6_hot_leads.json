@@ -1,0 +1,174 @@
+{
+  "name": "6️⃣ Уведомления о горячих лидах",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hot-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-hot",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "hot-lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "qualified"
+            }
+          ]
+        }
+      },
+      "id": "check-qualified",
+      "name": "Квалифицированный?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/mcp",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"get_client\",\n  \"params\": {\n    \"client_id\": \"{{ $json.client_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "get-client",
+      "name": "Получить данные",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const client = $json;\nconst prefs = client.preferences || {};\n\nlet prefsText = '';\nif (prefs.type) prefsText += `Тип: ${prefs.type}\\n`;\nif (prefs.min_price) prefsText += `Бюджет от: ${Number(prefs.min_price).toLocaleString('ru-RU')} ₽\\n`;\nif (prefs.max_price) prefsText += `Бюджет до: ${Number(prefs.max_price).toLocaleString('ru-RU')} ₽\\n`;\nif (prefs.rooms) prefsText += `Комнат: ${prefs.rooms}\\n`;\nif (prefs.location) prefsText += `Локация: ${prefs.location}\\n`;\n\nconst message = `🔥 <b>ГОРЯЧИЙ ЛИД!</b>\\n\\n` +\n  `👤 Клиент: ${client.name}\\n` +\n  `📞 Телефон: ${client.phone}\\n` +\n  `📱 Канал: ${client.channel}\\n\\n` +\n  `<b>Предпочтения:</b>\\n${prefsText || 'Не указаны'}\\n\\n` +\n  `⏰ Время: ${new Date().toLocaleString('ru-RU')}\\n\\n` +\n  `<b>❗️ СВЯЖИТЕСЬ КАК МОЖНО СКОРЕЕ!</b>`;\n\nreturn {\n  json: {\n    message: message,\n    client: client\n  }\n};"
+      },
+      "id": "format-alert",
+      "name": "Форматировать алерт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_MANAGER_CHAT_ID }}\",\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"HTML\"\n}",
+        "options": {}
+      },
+      "id": "notify-manager",
+      "name": "Уведомить менеджера",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"notified\": true\n}"
+      },
+      "id": "respond-yes",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"notified\": false,\n  \"reason\": \"not_qualified\"\n}"
+      },
+      "id": "respond-no",
+      "name": "Response (не квалифицирован)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Квалифицированный?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Квалифицированный?": {
+      "main": [
+        [
+          {
+            "node": "Получить данные",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response (не квалифицирован)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить данные": {
+      "main": [
+        [
+          {
+            "node": "Форматировать алерт",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать алерт": {
+      "main": [
+        [
+          {
+            "node": "Уведомить менеджера",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Уведомить менеджера": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}

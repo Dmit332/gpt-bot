@@ -1,0 +1,202 @@
+{
+  "name": "3️⃣ Публикация контента по расписанию",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Расписание каждые 12ч",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:5000/api/content/schedule",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-schedule",
+      "name": "Получить расписание",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const schedule = $input.all()[0].json.schedule;\nconst today = new Date().toISOString().split('T')[0];\n\nconst todayContent = schedule.filter(item => {\n  return item.scheduled_date.startsWith(today);\n});\n\nif (todayContent.length === 0) {\n  return [];\n}\n\nreturn todayContent.map(item => ({\n  json: item\n}));"
+      },
+      "id": "filter-today",
+      "name": "Фильтр на сегодня",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-content",
+      "name": "Есть контент?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Формируем красивый пост для Instagram\nconst content = $json;\n\nlet postText = content.content;\n\n// Добавляем хэштеги если их нет\nif (!postText.includes('#')) {\n  postText += '\\n\\n#недвижимость #квартира #дом #москва #риэлтор #продажанедвижимости #новостройки #жилье #инвестиции #buyrealestate';\n}\n\nreturn {\n  json: {\n    caption: postText,\n    type: content.type,\n    content_id: content.id,\n    title: content.title\n  }\n};"
+      },
+      "id": "format-post",
+      "name": "Форматировать пост",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/mcp",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"update_content_status\",\n  \"params\": {\n    \"content_id\": \"{{ $json.content_id }}\",\n    \"status\": \"published\"\n  }\n}",
+        "options": {}
+      },
+      "id": "mark-published",
+      "name": "Отметить опубликованным",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  json: {\n    message: `✅ Контент опубликован\\n\\nТип: ${$json.type}\\nЗаголовок: ${$json.title}\\nВремя: ${new Date().toLocaleString('ru-RU')}`\n  }\n};"
+      },
+      "id": "log-success",
+      "name": "Логирование",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  json: {\n    message: 'Нет контента для публикации сегодня'\n  }\n};"
+      },
+      "id": "no-content",
+      "name": "Нет контента",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Расписание каждые 12ч": {
+      "main": [
+        [
+          {
+            "node": "Получить расписание",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получить расписание": {
+      "main": [
+        [
+          {
+            "node": "Фильтр на сегодня",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Фильтр на сегодня": {
+      "main": [
+        [
+          {
+            "node": "Есть контент?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Есть контент?": {
+      "main": [
+        [
+          {
+            "node": "Форматировать пост",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Нет контента",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать пост": {
+      "main": [
+        [
+          {
+            "node": "Отметить опубликованным",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Отметить опубликованным": {
+      "main": [
+        [
+          {
+            "node": "Логирование",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [{"name": "AI Real Estate Bot"}],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-07T00:00:00.000Z",
+  "versionId": "1"
+}
