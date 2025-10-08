@@ -1,0 +1,1023 @@
+[
+  {
+    "name": "1️⃣ Новый лид - Автоматическая обработка",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "new-lead",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-new-lead",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          240,
+          300
+        ],
+        "webhookId": "new-lead"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/mcp",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"create_client\",\n  \"params\": {\n    \"name\": \"{{ $json.name }}\",\n    \"phone\": \"{{ $json.phone }}\",\n    \"channel\": \"{{ $json.channel || 'n8n' }}\",\n    \"preferences\": {{ $json.preferences ? JSON.stringify($json.preferences) : '{}' }}\n  }\n}",
+          "options": {}
+        },
+        "id": "create-client-mcp",
+        "name": "Создать клиента",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/whatsapp/send",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"Здравствуйте! 👋 Спасибо за интерес к недвижимости.\\n\\nЯ AI-ассистент, помогу подобрать идеальный вариант для вас.\\n\\nРасскажите, что вас интересует?\"\n}",
+          "options": {}
+        },
+        "id": "send-whatsapp",
+        "name": "Отправить приветствие",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"client_id\": \"{{ $json.id }}\",\n  \"message\": \"Лид создан, приветствие отправлено\"\n}"
+        },
+        "id": "respond-success",
+        "name": "Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          900,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Создать клиента",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Создать клиента": {
+        "main": [
+          [
+            {
+              "node": "Отправить приветствие",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Отправить приветствие": {
+        "main": [
+          [
+            {
+              "node": "Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  },
+  {
+    "name": "2️⃣ Автоподбор объектов по предпочтениям",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "search-properties",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-search",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          240,
+          300
+        ],
+        "webhookId": "search-properties"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/mcp",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"update_preferences\",\n  \"params\": {\n    \"client_id\": \"{{ $json.client_id }}\",\n    \"preferences\": {{ JSON.stringify($json.preferences) }}\n  }\n}",
+          "options": {}
+        },
+        "id": "update-prefs",
+        "name": "Обновить предпочтения",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/mcp",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"search_properties\",\n  \"params\": {{ JSON.stringify($json.preferences) }}\n}",
+          "options": {}
+        },
+        "id": "search-props",
+        "name": "Поиск объектов",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "const properties = $input.all()[0].json;\nconst clientData = items[0].json;\n\nif (!Array.isArray(properties) || properties.length === 0) {\n  return {\n    json: {\n      message: \"К сожалению, не нашел подходящих объектов 😔\\n\\nДавайте попробуем изменить параметры поиска?\",\n      phone: clientData.phone,\n      found: 0\n    }\n  };\n}\n\nlet message = `Отлично! Нашёл для вас ${properties.length} подходящих вариантов:\\n\\n`;\n\nproperties.slice(0, 3).forEach((prop, i) => {\n  message += `🏠 **Вариант ${i + 1}:**\\n`;\n  message += `${prop.title}\\n`;\n  message += `💰 Цена: ${Number(prop.price).toLocaleString('ru-RU')} ₽\\n`;\n  message += `📍 ${prop.location}\\n`;\n  message += `📐 Площадь: ${prop.area} м² | Комнат: ${prop.rooms}\\n\\n`;\n});\n\nif (properties.length > 3) {\n  message += `И ещё ${properties.length - 3} вариантов!\\n\\n`;\n}\n\nmessage += `Какой вариант интересен? Расскажу подробнее! 😊`;\n\nreturn {\n  json: {\n    message: message,\n    phone: clientData.phone,\n    found: properties.length,\n    properties: properties.slice(0, 3)\n  }\n};"
+        },
+        "id": "format-results",
+        "name": "Форматировать",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          900,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/whatsapp/send",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"{{ $json.message }}\"\n}",
+          "options": {}
+        },
+        "id": "send-results",
+        "name": "Отправить подборку",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          1120,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"found\": {{ $json.found }},\n  \"sent\": true\n}"
+        },
+        "id": "respond",
+        "name": "Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1340,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Обновить предпочтения",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Обновить предпочтения": {
+        "main": [
+          [
+            {
+              "node": "Поиск объектов",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Поиск объектов": {
+        "main": [
+          [
+            {
+              "node": "Форматировать",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Форматировать": {
+        "main": [
+          [
+            {
+              "node": "Отправить подборку",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Отправить подборку": {
+        "main": [
+          [
+            {
+              "node": "Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  },
+  {
+    "name": "3️⃣ Публикация контента по расписанию",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 12
+              }
+            ]
+          }
+        },
+        "id": "schedule-trigger",
+        "name": "Расписание каждые 12ч",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          240,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "http://localhost:5000/api/content/schedule",
+          "authentication": "none",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "limit",
+                "value": "10"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "get-schedule",
+        "name": "Получить расписание",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "const schedule = $input.all()[0].json.schedule;\nconst today = new Date().toISOString().split('T')[0];\n\nconst todayContent = schedule.filter(item => {\n  return item.scheduled_date.startsWith(today);\n});\n\nif (todayContent.length === 0) {\n  return [];\n}\n\nreturn todayContent.map(item => ({\n  json: item\n}));"
+        },
+        "id": "filter-today",
+        "name": "Фильтр на сегодня",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{ $json.length }}",
+                "operation": "larger",
+                "value2": 0
+              }
+            ]
+          }
+        },
+        "id": "check-content",
+        "name": "Есть контент?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          900,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "// Формируем красивый пост для Instagram\nconst content = $json;\n\nlet postText = content.content;\n\n// Добавляем хэштеги если их нет\nif (!postText.includes('#')) {\n  postText += '\\n\\n#недвижимость #квартира #дом #москва #риэлтор #продажанедвижимости #новостройки #жилье #инвестиции #buyrealestate';\n}\n\nreturn {\n  json: {\n    caption: postText,\n    type: content.type,\n    content_id: content.id,\n    title: content.title\n  }\n};"
+        },
+        "id": "format-post",
+        "name": "Форматировать пост",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/mcp",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"update_content_status\",\n  \"params\": {\n    \"content_id\": \"{{ $json.content_id }}\",\n    \"status\": \"published\"\n  }\n}",
+          "options": {}
+        },
+        "id": "mark-published",
+        "name": "Отметить опубликованным",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          1340,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "return {\n  json: {\n    message: `✅ Контент опубликован\\n\\nТип: ${$json.type}\\nЗаголовок: ${$json.title}\\nВремя: ${new Date().toLocaleString('ru-RU')}`\n  }\n};"
+        },
+        "id": "log-success",
+        "name": "Логирование",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1560,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "return {\n  json: {\n    message: 'Нет контента для публикации сегодня'\n  }\n};"
+        },
+        "id": "no-content",
+        "name": "Нет контента",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          400
+        ]
+      }
+    ],
+    "connections": {
+      "Расписание каждые 12ч": {
+        "main": [
+          [
+            {
+              "node": "Получить расписание",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Получить расписание": {
+        "main": [
+          [
+            {
+              "node": "Фильтр на сегодня",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Фильтр на сегодня": {
+        "main": [
+          [
+            {
+              "node": "Есть контент?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Есть контент?": {
+        "main": [
+          [
+            {
+              "node": "Форматировать пост",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Нет контента",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Форматировать пост": {
+        "main": [
+          [
+            {
+              "node": "Отметить опубликованным",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Отметить опубликованным": {
+        "main": [
+          [
+            {
+              "node": "Логирование",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  },
+  {
+    "name": "4️⃣ WhatsApp - AI обработка сообщений",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "whatsapp-incoming",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "whatsapp-webhook",
+        "name": "WhatsApp Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          240,
+          300
+        ],
+        "webhookId": "whatsapp-incoming"
+      },
+      {
+        "parameters": {
+          "functionCode": "// Извлекаем данные от Twilio WhatsApp\nconst body = $json.Body || $json.body || '';\nconst from = ($json.From || $json.from || '').replace('whatsapp:', '');\nconst clientId = from.replace(/[^0-9]/g, '');\n\nreturn {\n  json: {\n    client_id: clientId,\n    phone: from,\n    message: body,\n    channel: 'whatsapp',\n    timestamp: new Date().toISOString()\n  }\n};"
+        },
+        "id": "parse-whatsapp",
+        "name": "Парсинг данных",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/chat",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"message\": \"{{ $json.message }}\",\n  \"channel\": \"whatsapp\"\n}",
+          "options": {}
+        },
+        "id": "ai-assistant",
+        "name": "AI Ассистент",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/whatsapp/send",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"to\": \"{{ $json.phone }}\",\n  \"message\": \"{{ $json.response }}\"\n}",
+          "options": {}
+        },
+        "id": "send-response",
+        "name": "Отправить ответ",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          900,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "=OK"
+        },
+        "id": "respond-ok",
+        "name": "Response OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1120,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "WhatsApp Webhook": {
+        "main": [
+          [
+            {
+              "node": "Парсинг данных",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Парсинг данных": {
+        "main": [
+          [
+            {
+              "node": "AI Ассистент",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Ассистент": {
+        "main": [
+          [
+            {
+              "node": "Отправить ответ",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Отправить ответ": {
+        "main": [
+          [
+            {
+              "node": "Response OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  },
+  {
+    "name": "5️⃣ Генерация контент-пакета на месяц",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 1 * *"
+              }
+            ]
+          }
+        },
+        "id": "monthly-trigger",
+        "name": "1-го числа в 9:00",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          240,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/content/pack",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"posts\": 10,\n  \"stories\": 15\n}",
+          "options": {}
+        },
+        "id": "create-pack",
+        "name": "Создать контент-пакет",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "const pack = $json;\n\nconst postsCount = pack.posts ? pack.posts.length : 0;\nconst storiesCount = pack.stories ? pack.stories.length : 0;\nconst scheduleCount = pack.schedule ? pack.schedule.length : 0;\n\nconst message = `✅ Контент-пакет на месяц готов!\\n\\n` +\n  `📝 Постов: ${postsCount}\\n` +\n  `📸 Сторис: ${storiesCount}\\n` +\n  `📅 Публикаций запланировано: ${scheduleCount}\\n\\n` +\n  `Все готово к автоматической публикации! 🚀`;\n\nreturn {\n  json: {\n    message: message,\n    posts_count: postsCount,\n    stories_count: storiesCount,\n    schedule_count: scheduleCount,\n    created_at: new Date().toISOString()\n  }\n};"
+        },
+        "id": "format-report",
+        "name": "Форматировать отчет",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_MANAGER_CHAT_ID }}\",\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"HTML\"\n}",
+          "options": {}
+        },
+        "id": "notify-telegram",
+        "name": "Уведомить в Telegram",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          900,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "console.log('Контент-пакет создан:', $json);\nreturn $input.all();"
+        },
+        "id": "log-result",
+        "name": "Логирование",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "1-го числа в 9:00": {
+        "main": [
+          [
+            {
+              "node": "Создать контент-пакет",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Создать контент-пакет": {
+        "main": [
+          [
+            {
+              "node": "Форматировать отчет",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Форматировать отчет": {
+        "main": [
+          [
+            {
+              "node": "Уведомить в Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Уведомить в Telegram": {
+        "main": [
+          [
+            {
+              "node": "Логирование",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  },
+  {
+    "name": "6️⃣ Уведомления о горячих лидах",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "hot-lead",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "webhook-hot",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          240,
+          300
+        ],
+        "webhookId": "hot-lead"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equals",
+                "value2": "qualified"
+              }
+            ]
+          }
+        },
+        "id": "check-qualified",
+        "name": "Квалифицированный?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5000/api/mcp",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"action\": \"get_client\",\n  \"params\": {\n    \"client_id\": \"{{ $json.client_id }}\"\n  }\n}",
+          "options": {}
+        },
+        "id": "get-client",
+        "name": "Получить данные",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          680,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "const client = $json;\nconst prefs = client.preferences || {};\n\nlet prefsText = '';\nif (prefs.type) prefsText += `Тип: ${prefs.type}\\n`;\nif (prefs.min_price) prefsText += `Бюджет от: ${Number(prefs.min_price).toLocaleString('ru-RU')} ₽\\n`;\nif (prefs.max_price) prefsText += `Бюджет до: ${Number(prefs.max_price).toLocaleString('ru-RU')} ₽\\n`;\nif (prefs.rooms) prefsText += `Комнат: ${prefs.rooms}\\n`;\nif (prefs.location) prefsText += `Локация: ${prefs.location}\\n`;\n\nconst message = `🔥 <b>ГОРЯЧИЙ ЛИД!</b>\\n\\n` +\n  `👤 Клиент: ${client.name}\\n` +\n  `📞 Телефон: ${client.phone}\\n` +\n  `📱 Канал: ${client.channel}\\n\\n` +\n  `<b>Предпочтения:</b>\\n${prefsText || 'Не указаны'}\\n\\n` +\n  `⏰ Время: ${new Date().toLocaleString('ru-RU')}\\n\\n` +\n  `<b>❗️ СВЯЖИТЕСЬ КАК МОЖНО СКОРЕЕ!</b>`;\n\nreturn {\n  json: {\n    message: message,\n    client: client\n  }\n};"
+        },
+        "id": "format-alert",
+        "name": "Форматировать алерт",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          900,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_MANAGER_CHAT_ID }}\",\n  \"text\": \"{{ $json.message }}\",\n  \"parse_mode\": \"HTML\"\n}",
+          "options": {}
+        },
+        "id": "notify-manager",
+        "name": "Уведомить менеджера",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.1,
+        "position": [
+          1120,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"notified\": true\n}"
+        },
+        "id": "respond-yes",
+        "name": "Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          1340,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={\n  \"success\": true,\n  \"notified\": false,\n  \"reason\": \"not_qualified\"\n}"
+        },
+        "id": "respond-no",
+        "name": "Response (не квалифицирован)",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          680,
+          400
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Квалифицированный?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Квалифицированный?": {
+        "main": [
+          [
+            {
+              "node": "Получить данные",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Response (не квалифицирован)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Получить данные": {
+        "main": [
+          [
+            {
+              "node": "Форматировать алерт",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Форматировать алерт": {
+        "main": [
+          [
+            {
+              "node": "Уведомить менеджера",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Уведомить менеджера": {
+        "main": [
+          [
+            {
+              "node": "Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+      {
+        "name": "AI Real Estate Bot"
+      }
+    ],
+    "triggerCount": 0,
+    "updatedAt": "2025-10-07T00:00:00.000Z",
+    "versionId": "1"
+  }
+]
